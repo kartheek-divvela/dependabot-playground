@@ -1,0 +1,35 @@
+# CODEOWNERS
+#
+# Every PR that touches a matching path requires review from the listed owner(s).
+# Paired with branch protection on `main` that has
+# "Require review from Code Owners" enabled -- without that setting this file
+# only auto-requests reviewers, it does not block merging.
+#
+# Rules are matched LAST-MATCH-WINS: the final matching line is the one that
+# applies, which is the opposite of .gitignore. Order matters.
+#
+# Owners must have write access to this repository or they are silently ignored.
+
+# ---------------------------------------------------------------------------
+# Default owner for everything in the repo
+# ---------------------------------------------------------------------------
+*                       @kartheek-divvela
+
+# ---------------------------------------------------------------------------
+# Per-module owners
+#
+# Currently all point at the same person. Reassign individual lines to
+# different users/teams to see how GitHub requests reviews per changed path --
+# e.g. a Dependabot PR touching only /module-b/package.json will request the
+# module-b owner and nobody else.
+# ---------------------------------------------------------------------------
+/module-a/              @kartheek-divvela
+/module-b/              @kartheek-divvela
+/module-c/              @kartheek-divvela
+/module-d/              @kartheek-divvela
+
+# Build / CI / dependency configuration
+/pom.xml                @kartheek-divvela
+/.github/               @kartheek-divvela
+/.github/dependabot.yml @kartheek-divvela
+/.github/CODEOWNERS     @kartheek-divvela
