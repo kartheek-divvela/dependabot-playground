@@ -1,0 +1,96 @@
+# Dependabot configuration
+#
+# Each entry under `updates:` is an INDEPENDENT update stream with its own
+# schedule, PR budget, labels and commit prefix.
+#
+# Versions throughout this repo are deliberately pinned to old releases so
+# Dependabot always has work to do. See README.md.
+#
+# Note: `directory` is NOT recursive -- one entry per manifest location.
+# Note: there is no `automerge` key in Dependabot v2 config. Auto-merge is
+#       handled by .github/workflows/dependabot-auto-merge-native.yml, which
+#       auto-merges patch/minor updates only and leaves majors for review.
+
+version: 2
+updates:
+  # ---- Python (module-a) : requirements.txt + requirements-dev.txt --------
+  - package-ecosystem: pip
+    directory: /module-a
+    schedule:
+      interval: daily
+    open-pull-requests-limit: 5
+    labels:
+      - dependabot
+      - pip
+    commit-message:
+      prefix: pip
+
+  # ---- Node.js (module-b) : package.json ---------------------------------
+  # No `groups:` block on purpose. Grouped PRs make dependabot/fetch-metadata
+  # return an empty update-type, which the auto-merge workflow treats as
+  # "not patch/minor" and skips. Keeping updates ungrouped means every PR is a
+  # single dependency and is eligible for auto-merge.
+  - package-ecosystem: npm
+    directory: /module-b
+    schedule:
+      interval: daily
+    open-pull-requests-limit: 5
+    labels:
+      - dependabot
+      - npm
+    commit-message:
+      prefix: npm
+
+  # ---- Java / Maven (module-c) -------------------------------------------
+  - package-ecosystem: maven
+    directory: /module-c
+    schedule:
+      interval: daily
+    open-pull-requests-limit: 5
+    labels:
+      - dependabot
+      - maven-c
+    commit-message:
+      prefix: maven-c
+
+  # ---- Java / Maven (module-d) -------------------------------------------
+  - package-ecosystem: maven
+    directory: /module-d
+    schedule:
+      interval: daily
+    open-pull-requests-limit: 5
+    labels:
+      - dependabot
+      - maven-d
+    commit-message:
+      prefix: maven-d
+
+  # ---- Deliberately NOT configured: github-actions @ / --------------------
+  # The github-actions ecosystem updates `uses:` pins, which live ONLY inside
+  # .github/workflows/*.yml. Merging such a PR writes to a workflow file, and
+  # GitHub gates that behind the dedicated `workflows: write` App permission
+  # (separate from `contents: write`) because workflow files can read secrets
+  # and execute arbitrary code. The auto-merge App intentionally does NOT hold
+  # that permission, so this stream is omitted rather than left to fail at
+  # merge time with:
+  #   refusing to allow a GitHub App to create or update workflow
+  #   `.github/workflows/ci.yml` without `workflows` permission
+  #
+  # To enable it later: grant the App "Workflows: Read and write", approve the
+  # pending permission request on the installation page, then re-add:
+  #   - package-ecosystem: github-actions
+  #     directory: /
+  #     schedule:
+  #       interval: daily
+  #     open-pull-requests-limit: 5
+  #     labels: [dependabot, github-actions]
+  #     commit-message:
+  #       prefix: actions
+
+  # ---- Deliberately NOT configured: maven @ / (the parent aggregator POM) --
+  # On the predecessor repo, scanning the aggregator POM produced DUPLICATE
+  # PRs: the `/` scan walked <modules> into module-c/module-d, while the child
+  # scans resolved inheritance back up to the parent. Seven artifacts ended up
+  # with two open PRs each. The child streams above already cover the parent's
+  # managed dependencies and plugin pins, so the `/` entry adds nothing.
+  # Add it back only if you want to observe that duplication first-hand.
