@@ -31,22 +31,34 @@ jobs:
         with:
           github-token: ${{ steps.app-token.outputs.token }}
 
-      - name: Enable auto-merge for non-major updates
-        if: steps.meta.outputs.update-type != 'version-update:semver-major'
+      # Positive allowlist (fail-closed): auto-merge ONLY when the update type is
+      # explicitly patch or minor. Anything else -- major, or an EMPTY update-type
+      # (which fetch-metadata returns for grouped PRs and on internal failure) --
+      # falls through to the comment step and is left for manual review.
+      - name: Enable auto-merge for patch and minor updates
+        if: |
+          steps.meta.outputs.update-type == 'version-update:semver-patch' ||
+          steps.meta.outputs.update-type == 'version-update:semver-minor'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           PR_URL: ${{ github.event.pull_request.html_url }}
+          UPDATE_TYPE: ${{ steps.meta.outputs.update-type }}
         run: |
-          echo "update-type: ${{ steps.meta.outputs.update-type }}"
+          echo "update-type: $UPDATE_TYPE -- eligible for auto-merge"
           if ! gh pr merge --auto --merge "$PR_URL"; then
             echo "Auto-merge arming failed; attempting direct merge (PR may already be mergeable)."
             gh pr merge --merge "$PR_URL"
           fi
 
-      - name: Comment on skipped major updates
-        if: steps.meta.outputs.update-type == 'version-update:semver-major'
+      - name: Comment on updates that were not auto-merged
+        if: |
+          steps.meta.outputs.update-type != 'version-update:semver-patch' &&
+          steps.meta.outputs.update-type != 'version-update:semver-minor'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           PR_URL: ${{ github.event.pull_request.html_url }}
+          UPDATE_TYPE: ${{ steps.meta.outputs.update-type }}
         run: |
-          gh pr comment "$PR_URL" --body "Auto-merge skipped: this is a **major** version update (\`${{ steps.meta.outputs.update-type }}\`) and requires manual review."
+          label="${UPDATE_TYPE:-unknown (grouped PR or metadata unavailable)}"
+          echo "update-type: $label -- NOT auto-merging"
+          gh pr comment "$PR_URL" --body "Auto-merge skipped: update type \`$label\` is not an allowed patch/minor update. This PR requires manual review."
