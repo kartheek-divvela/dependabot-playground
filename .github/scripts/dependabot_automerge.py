@@ -3,6 +3,8 @@ import json
 import os
 import re
 import sys
+import time
+import urllib.error
 import urllib.request
 
 TITLE_RE = re.compile(r"bump\s+(?P<dep>\S+)\s+from\s+(?P<old>\S+)\s+to\s+(?P<new>\S+)", re.I)
@@ -75,43 +77,70 @@ def main():
             continue
         status, detail = api("GET", "/repos/%s/pulls/%d" % (repo, number), token)
         if status < 200 or status >= 300:
-            rows.append(("FAIL", number, dep_display, old, new, "pull-request HTTP %d: %s" % (status, detail)))
+            rows.append(("FAIL", number, dep_display, old_display, new_display, "pull-request HTTP %d: %s" % (status, detail)))
             continue
-        if detail.get("mergeable_state") == "dirty":
-            rows.append(("SKIP", number, dep, old, new, "conflict"))
+        mergeable_state = detail.get("mergeable_state")
+        for attempt in range(2):
+            if mergeable_state not in (None, "unknown"):
+                break
+            time.sleep(2)
+            status, detail = api("GET", "/repos/%s/pulls/%d" % (repo, number), token)
+            if status < 200 or status >= 300:
+                rows.append(("FAIL", number, dep_display, old_display, new_display, "pull-request HTTP %d: %s" % (status, detail)))
+                break
+            mergeable_state = detail.get("mergeable_state")
+        else:
+            rows.append(("SKIP", number, dep_display, old_display, new_display, "mergeability-unknown"))
+            continue
+        if status < 200 or status >= 300:
+            continue
+        if mergeable_state in (None, "unknown"):
+            rows.append(("SKIP", number, dep_display, old_display, new_display, "mergeability-unknown"))
+            continue
+        if mergeable_state == "dirty":
+            rows.append(("SKIP", number, dep_display, old_display, new_display, "conflict"))
             continue
         sha = detail.get("head", {}).get("sha")
         status, checks = api("GET", "/repos/%s/commits/%s/check-runs?per_page=100" % (repo, sha), token)
         if status < 200 or status >= 300:
-            rows.append(("FAIL", number, dep, old, new, "check-runs HTTP %d: %s" % (status, checks)))
+            rows.append(("FAIL", number, dep_display, old_display, new_display, "check-runs HTTP %d: %s" % (status, checks)))
             continue
         check = next((c for c in checks.get("check_runs", []) if c.get("name") == "validate-manifests"), None)
         if not check or check.get("status") != "completed":
-            rows.append(("SKIP", number, dep, old, new, "checks-pending"))
+            rows.append(("SKIP", number, dep_display, old_display, new_display, "checks-pending"))
             continue
         if check.get("conclusion") != "success":
-            rows.append(("SKIP", number, dep, old, new, "checks-failed"))
+            rows.append(("SKIP", number, dep_display, old_display, new_display, "checks-failed"))
             continue
         if dry_run:
-            rows.append(("MERGE", number, dep, old, new, "would-merge"))
+            rows.append(("WOULD-MERGE", number, dep_display, old_display, new_display, "would-merge"))
             continue
         status, result = api("PUT", "/repos/%s/pulls/%d/merge" % (repo, number), token, {"merge_method": "merge"})
         if status < 200 or status >= 300:
-            rows.append(("FAIL", number, dep, old, new, "merge HTTP %d: %s" % (status, result)))
+            rows.append(("FAIL", number, dep_display, old_display, new_display, "merge HTTP %d: %s" % (status, result)))
         else:
-            rows.append(("MERGE", number, dep, old, new, "merged"))
+            rows.append(("MERGE", number, dep_display, old_display, new_display, "merged"))
 
+    mode = "DRY RUN" if dry_run else "LIVE"
+    print("MODE: %s (no merges performed)" % mode if dry_run else "MODE: LIVE")
     for action, number, dep, old, new, reason in rows:
         print("%s  #%d  %s %s -> %s  (%s)" % (action, number, dep, old, new, reason))
-    counts = {key: sum(1 for row in rows if row[0] == key) for key in ("MERGE", "SKIP", "FAIL")}
-    print("Summary: %d merged, %d skipped, %d failed" % (counts["MERGE"], counts["SKIP"], counts["FAIL"]))
+    counts = {key: sum(1 for row in rows if row[0] == key) for key in ("MERGE", "WOULD-MERGE", "SKIP", "FAIL")}
+    if dry_run:
+        print("Summary (DRY RUN): %d would merge, %d skipped, %d failed" % (counts["WOULD-MERGE"], counts["SKIP"], counts["FAIL"]))
+    else:
+        print("Summary (LIVE): %d merged, %d skipped, %d failed" % (counts["MERGE"], counts["SKIP"], counts["FAIL"]))
     summary = os.environ.get("GITHUB_STEP_SUMMARY")
     if summary:
         with open(summary, "a", encoding="utf-8") as output:
+            output.write(("MODE: DRY RUN (no merges performed)" if dry_run else "MODE: LIVE") + "\n\n")
             output.write("## Dependabot auto-merge sweep\n\n| Action | PR | Dependency | Old | New | Reason |\n|---|---:|---|---|---|---|\n")
             for action, number, dep, old, new, reason in rows:
                 output.write("| %s | #%d | %s | %s | %s | %s |\n" % (action, number, dep, old, new, reason))
-            output.write("\n**Summary:** %d merged, %d skipped, %d failed\n" % (counts["MERGE"], counts["SKIP"], counts["FAIL"]))
+            if dry_run:
+                output.write("\n**Summary (DRY RUN):** %d would merge, %d skipped, %d failed\n" % (counts["WOULD-MERGE"], counts["SKIP"], counts["FAIL"]))
+            else:
+                output.write("\n**Summary (LIVE):** %d merged, %d skipped, %d failed\n" % (counts["MERGE"], counts["SKIP"], counts["FAIL"]))
     return 0
 
 
