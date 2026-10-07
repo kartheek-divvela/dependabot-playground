@@ -11,8 +11,14 @@ jobs:
   validate-manifests:
     name: validate-manifests
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
+      - name: Simulate CI latency
+        run: |
+          delay=$(python3 -c 'import random; print(random.randint(60, 180))')
+          printf 'Simulating CI latency: sleeping %ss (%dm%02ds)\n' "$delay" "$((delay / 60))" "$((delay % 60))"
+          sleep "$delay"
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
