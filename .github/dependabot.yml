@@ -65,17 +65,27 @@ updates:
     commit-message:
       prefix: maven-d
 
-  # ---- GitHub Actions (workflow `uses:` pins) ----------------------------
-  - package-ecosystem: github-actions
-    directory: /
-    schedule:
-      interval: daily
-    open-pull-requests-limit: 5
-    labels:
-      - dependabot
-      - github-actions
-    commit-message:
-      prefix: actions
+  # ---- Deliberately NOT configured: github-actions @ / --------------------
+  # The github-actions ecosystem updates `uses:` pins, which live ONLY inside
+  # .github/workflows/*.yml. Merging such a PR writes to a workflow file, and
+  # GitHub gates that behind the dedicated `workflows: write` App permission
+  # (separate from `contents: write`) because workflow files can read secrets
+  # and execute arbitrary code. The auto-merge App intentionally does NOT hold
+  # that permission, so this stream is omitted rather than left to fail at
+  # merge time with:
+  #   refusing to allow a GitHub App to create or update workflow
+  #   `.github/workflows/ci.yml` without `workflows` permission
+  #
+  # To enable it later: grant the App "Workflows: Read and write", approve the
+  # pending permission request on the installation page, then re-add:
+  #   - package-ecosystem: github-actions
+  #     directory: /
+  #     schedule:
+  #       interval: daily
+  #     open-pull-requests-limit: 5
+  #     labels: [dependabot, github-actions]
+  #     commit-message:
+  #       prefix: actions
 
   # ---- Deliberately NOT configured: maven @ / (the parent aggregator POM) --
   # On the predecessor repo, scanning the aggregator POM produced DUPLICATE
