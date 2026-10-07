@@ -6,8 +6,10 @@
 name: Dependabot auto-merge (native)
 
 on:
-  pull_request:
-    types: [opened, reopened, synchronize]
+  # Disabled: was `pull_request`. `gh pr merge --auto` does NOT honour ruleset
+  # bypass actors, so armed PRs sat blocked on code-owner review forever (PR #18).
+  # Merging is handled by the sweeper workflow instead. Manual-only now.
+  workflow_dispatch:
 
 permissions:
   contents: read
