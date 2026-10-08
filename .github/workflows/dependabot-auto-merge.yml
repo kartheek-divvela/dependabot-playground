@@ -13,6 +13,18 @@ on:
         type: boolean
         default: false
         required: true
+      pr_author:
+        description: Only sweep PRs opened by this author
+        type: string
+        default: 'dependabot[bot]'
+        required: true
+      filter_labels:
+        description: >-
+          Optional comma-separated labels. Leave blank for no label filtering.
+          When set, a PR must carry EVERY listed label (e.g. "dependabot,npm").
+        type: string
+        default: ''
+        required: false
   # Enable after a live run is verified:
   # schedule:
   #   - cron: '17 * * * *'
@@ -41,4 +53,6 @@ jobs:
           REPO: ${{ github.repository }}
           DRY_RUN: ${{ inputs.dry_run }}
           INCLUDE_MAJORS: ${{ inputs.include_majors }}
+          PR_AUTHOR: ${{ inputs.pr_author }}
+          FILTER_LABELS: ${{ inputs.filter_labels }}
         run: python3 .github/scripts/dependabot_automerge.py

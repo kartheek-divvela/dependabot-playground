@@ -45,23 +45,47 @@ def main():
         print("GH_TOKEN and REPO are required", file=sys.stderr); return 1
     dry = os.environ.get("DRY_RUN", "false").lower() == "true"
     include = os.environ.get("INCLUDE_MAJORS", "false").lower() == "true"
+
+    # PRIMARY FILTER: author + state. Selection is driven by who opened the PR,
+    # not by labels -- labels are mutable by anyone with write access and are
+    # therefore not a trustworthy basis for granting a code-owner bypass.
+    author = os.environ.get("PR_AUTHOR", "dependabot[bot]").strip()
+
+    # OPTIONAL SECONDARY FILTER: comma-separated label names. Empty (default)
+    # means no label filtering at all. When set, a PR must carry EVERY listed
+    # label (AND semantics) to be selected. Extend by passing more names, e.g.
+    # FILTER_LABELS="dependabot,npm".
+    want_labels = [x.strip() for x in os.environ.get("FILTER_LABELS", "").split(",") if x.strip()]
+
     entries, page = [], 1
     while True:
-        status, payload = api("GET", f"/repos/{repo}/issues?state=open&labels=dependabot&per_page=100&page={page}", token)
+        status, payload = api("GET", f"/repos/{repo}/pulls?state=open&per_page=100&page={page}", token)
         if not 200 <= status < 300:
-            print(f"Cannot list labelled issues (HTTP {status}): {payload}", file=sys.stderr); return 1
+            print(f"Cannot list open pull requests (HTTP {status}): {payload}", file=sys.stderr); return 1
         if not isinstance(payload, list):
-            print("Cannot list labelled issues: unexpected response", file=sys.stderr); return 1
+            print("Cannot list open pull requests: unexpected response", file=sys.stderr); return 1
         entries.extend(payload)
         if len(payload) < 100: break
         page += 1
-    labelled_prs = [e for e in entries if "pull_request" in e]
-    selected = []
-    for e in labelled_prs:
-        if e.get("user", {}).get("login") != "dependabot[bot]":
-            print(f"LOUD: SKIP #{e.get('number')} (not-dependabot-authored)", file=sys.stderr)
-        else: selected.append(e)
-    print(f"Label selection: {len(labelled_prs)} labelled PRs, {len(selected)} Dependabot-authored PRs")
+
+    by_author = [e for e in entries if e.get("user", {}).get("login") == author]
+
+    if want_labels:
+        selected = []
+        for e in by_author:
+            have = {lb["name"] for lb in e.get("labels", [])}
+            if set(want_labels) <= have:
+                selected.append(e)
+            else:
+                missing = sorted(set(want_labels) - have)
+                print(f"SKIP #{e.get('number')} (missing label(s): {', '.join(missing)})")
+    else:
+        selected = by_author
+
+    label_note = f"all of {want_labels}" if want_labels else "(none)"
+    print(f"Selection: {len(entries)} open PRs -> {len(by_author)} authored by {author} "
+          f"-> {len(selected)} after label filter {label_note}")
+
     rows = []
     for e in selected:
         n = e["number"]
